@@ -1,4 +1,4 @@
-from tronpy import Tron
+from tronpy.async_tron import AsyncTron
 from .schemas import TronInfo
 from .repository import TronRepository
 
@@ -6,17 +6,29 @@ from .repository import TronRepository
 class TronService:
     def __init__(self, tron_repository: TronRepository):
         self.tron_repository = tron_repository
+        self.client = AsyncTron(network="nile")
 
-    def get_tron_info(self, address: str) -> TronInfo:
-        # Получаем информацию с использованием tronpy
-        client = Tron()
-        trx_balance = client.get_account_balance(address)
-        resources = client.get_account_resource(address)
-        # Предполагаем, что bandwidth и energy берутся из ключей "free_net_limit" и "energy_limit"
+    async def get_tron_info(self, address: str) -> TronInfo:
+        if not self.client.is_address(address):
+            raise ValueError("Invalid TRON address format")
+
+        try:
+            trx_balance = await self.client.get_account_balance(address)
+            resources = await self.client.get_account_resource(address)
+        except Exception as e:
+            if "account not found" in str(e):
+                trx_balance, resources = 0, {"free_net_limit": 0, "energy_limit": 0}
+            else:
+                raise e
+
         bandwidth = resources.get("free_net_limit", 0)
         energy = resources.get("energy_limit", 0)
-        # Записываем запрос в БД
-        self.tron_repository.create_request(address)
+
+        await self.tron_repository.create_request(address)
+
         return TronInfo(
             address=address, trx_balance=trx_balance, bandwidth=bandwidth, energy=energy
         )
+
+    async def close(self):
+        await self.client.close()
