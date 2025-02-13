@@ -1,18 +1,23 @@
+import pytest
 from fastapi.testclient import TestClient
 from src.main import app
+from src.tron.service import TronService
 
 client = TestClient(app)
 
 
-def test_get_tron_info_integration(monkeypatch):
-    class DummyTron:
-        def get_account_balance(self, address: str) -> float:
-            return 100.0
+@pytest.mark.asyncio
+async def test_get_tron_info_integration(monkeypatch):
+    class DummyTronService:
+        async def get_tron_info(self, address: str):
+            return {
+                "address": address,
+                "trx_balance": 100.0,
+                "bandwidth": 50,
+                "energy": 20,
+            }
 
-        def get_account_resource(self, address: str) -> dict:
-            return {"free_net_limit": 50, "energy_limit": 20}
-
-    monkeypatch.setattr("src.tron.service.Tron", lambda: DummyTron())
+    monkeypatch.setattr(TronService, "get_tron_info", DummyTronService().get_tron_info)
 
     response = client.post("/tron/", json={"address": "TXYZ"})
     assert response.status_code == 200
